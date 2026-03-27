@@ -72,7 +72,6 @@ function generateOne(
   let phonemeInspired = false;
 
   if (phonemes.length > 0 && Math.random() < 0.6) {
-    // Try to find a phoneme candidate that also exists in the chosen style pool
     const inPool = phonemes.filter((c) => pool.includes(c));
     if (inPool.length > 0) {
       const first = pickRandom(inPool);
@@ -83,13 +82,7 @@ function generateOne(
       }
       phonemeInspired = true;
     } else {
-      // phoneme char not in style pool — use it as first char anyway, fill rest from pool
-      const first = pickRandom(phonemes);
-      givenChars.push(first);
-      if (givenLen === 2) {
-        givenChars.push(pickRandom(pool));
-      }
-      phonemeInspired = true;
+      givenChars = pickUnique(pool, givenLen);
     }
   } else {
     givenChars = pickUnique(pool, givenLen);
