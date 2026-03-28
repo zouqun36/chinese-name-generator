@@ -1,10 +1,17 @@
-import InputForm from "@/components/InputForm";
+import { auth } from '@/auth';
+import InputForm from '@/components/InputForm';
+import NavBar from '@/components/NavBar';
 
-export default function Home() {
+export default async function Home() {
+  const session = await auth();
+
   return (
-    <main className="max-w-2xl mx-auto px-5 py-14">
+    <main className="max-w-2xl mx-auto px-5 py-10">
+      {/* Nav */}
+      <NavBar user={session?.user ?? null} />
+
       {/* Header */}
-      <header className="text-center mb-10">
+      <header className="text-center mb-10 mt-6">
         <h1 className="text-3xl font-bold tracking-tight mb-1">
           Chinese Name Generator
         </h1>
