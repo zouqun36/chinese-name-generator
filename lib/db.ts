@@ -1,12 +1,25 @@
 /**
  * D1 Database helper
  * In Cloudflare Pages, DB is injected via wrangler binding.
- * In development, we fall back to in-memory stubs.
+ * Access via getRequestContext() from @cloudflare/next-on-pages.
  */
 
+import { getOptionalRequestContext } from '@cloudflare/next-on-pages';
+
 export function getDB(): D1Database | null {
-  // @ts-ignore - Cloudflare Pages injects this at runtime
-  return (globalThis as any).DB ?? null;
+  // Try next-on-pages request context first (correct way in edge runtime)
+  try {
+    const ctx = getOptionalRequestContext();
+    const env = ctx?.env as any;
+    if (env?.DB) return env.DB as D1Database;
+  } catch {}
+
+  // Fallback: globalThis injection (works in some setups)
+  const g = globalThis as any;
+  if (g.DB) return g.DB as D1Database;
+  if (g.__D1_DB__) return g.__D1_DB__ as D1Database;
+
+  return null;
 }
 
 export function getTodayString(): string {
@@ -49,23 +62,17 @@ export async function upsertUser(
     .bind(params.email)
     .first<{ id: string }>();
 
-  return row!.id;
+  return row?.id ?? id;
 }
 
 export async function getUserByEmail(
   db: D1Database,
   email: string
-) {
+): Promise<{ id: string; email: string; name: string | null; avatar: string | null; subscription_tier: string; subscription_expires_at: number | null } | null> {
   return db
-    .prepare('SELECT * FROM users WHERE email = ?')
+    .prepare('SELECT id, email, name, avatar, subscription_tier, subscription_expires_at FROM users WHERE email = ?')
     .bind(email)
-    .first<{
-      id: string;
-      email: string;
-      name: string | null;
-      subscription_tier: string;
-      subscription_expires_at: number | null;
-    }>();
+    .first() ?? null;
 }
 
 export async function updateUserSubscription(
@@ -73,11 +80,9 @@ export async function updateUserSubscription(
   email: string,
   tier: 'free' | 'pro',
   expiresAt: number | null
-) {
+): Promise<void> {
   await db
-    .prepare(
-      'UPDATE users SET subscription_tier = ?, subscription_expires_at = ?, updated_at = ? WHERE email = ?'
-    )
+    .prepare('UPDATE users SET subscription_tier = ?, subscription_expires_at = ?, updated_at = ? WHERE email = ?')
     .bind(tier, expiresAt, Date.now(), email)
     .run();
 }
@@ -86,19 +91,20 @@ export async function updateUserSubscription(
 
 export async function getUsageCount(
   db: D1Database,
-  params: { userId?: string; ip?: string }
+  key: { userId: string; ip?: never } | { ip: string; userId?: never }
 ): Promise<number> {
   const today = getTodayString();
-  if (params.userId) {
+  if (key.userId) {
     const row = await db
       .prepare('SELECT count FROM usage_records WHERE user_id = ? AND date = ?')
-      .bind(params.userId, today)
+      .bind(key.userId, today)
       .first<{ count: number }>();
     return row?.count ?? 0;
   } else {
+    // Anonymous IP-based usage — stored with user_id = 'ip:xxx'
     const row = await db
-      .prepare('SELECT count FROM usage_records WHERE ip_address = ? AND date = ?')
-      .bind(params.ip, today)
+      .prepare('SELECT count FROM usage_records WHERE user_id = ? AND date = ?')
+      .bind(`ip:${key.ip}`, today)
       .first<{ count: number }>();
     return row?.count ?? 0;
   }
@@ -106,57 +112,45 @@ export async function getUsageCount(
 
 export async function incrementUsage(
   db: D1Database,
-  params: { userId?: string; ip?: string }
+  key: { userId: string; ip?: never } | { ip: string; userId?: never }
 ): Promise<number> {
   const today = getTodayString();
-  const now = Date.now();
-  const id = generateId();
+  const id = key.userId ?? `ip:${key.ip}`;
+  await db
+    .prepare(
+      `INSERT INTO usage_records (id, user_id, date, count, updated_at)
+       VALUES (?, ?, ?, 1, ?)
+       ON CONFLICT(user_id, date) DO UPDATE SET
+         count = count + 1,
+         updated_at = excluded.updated_at`
+    )
+    .bind(generateId(), id, today, Date.now())
+    .run();
 
-  if (params.userId) {
-    await db
-      .prepare(
-        `INSERT INTO usage_records (id, user_id, date, count, created_at)
-         VALUES (?, ?, ?, 1, ?)
-         ON CONFLICT(user_id, date) DO UPDATE SET count = count + 1`
-      )
-      .bind(id, params.userId, today, now)
-      .run();
+  const row = await db
+    .prepare('SELECT count FROM usage_records WHERE user_id = ? AND date = ?')
+    .bind(id, today)
+    .first<{ count: number }>();
+  return row?.count ?? 1;
+}
 
-    const row = await db
-      .prepare('SELECT count FROM usage_records WHERE user_id = ? AND date = ?')
-      .bind(params.userId, today)
-      .first<{ count: number }>();
-    return row?.count ?? 1;
-  } else {
-    await db
-      .prepare(
-        `INSERT INTO usage_records (id, ip_address, date, count, created_at)
-         VALUES (?, ?, ?, 1, ?)
-         ON CONFLICT(ip_address, date) DO UPDATE SET count = count + 1`
-      )
-      .bind(id, params.ip, today, now)
-      .run();
-
-    const row = await db
-      .prepare('SELECT count FROM usage_records WHERE ip_address = ? AND date = ?')
-      .bind(params.ip, today)
-      .first<{ count: number }>();
-    return row?.count ?? 1;
-  }
+// Legacy alias
+export async function getUsageToday(db: D1Database, userId: string): Promise<number> {
+  return getUsageCount(db, { userId });
 }
 
 // ── History ────────────────────────────────────────────────────────────────
 
-export async function addNameHistory(
+export async function addHistory(
   db: D1Database,
   params: {
     userId: string;
-    originalName: string | null;
-    gender: string | null;
-    birthday: string | null;
-    generatedNames: object[];
+    originalName: string;
+    gender: string;
+    birthday: string;
+    generatedNames: object; // JSON serializable
   }
-) {
+): Promise<void> {
   await db
     .prepare(
       `INSERT INTO name_history (id, user_id, original_name, gender, birthday, generated_names, created_at)
@@ -174,26 +168,16 @@ export async function addNameHistory(
     .run();
 }
 
-export async function getNameHistory(
+export async function getHistory(
   db: D1Database,
   userId: string,
-  limitDays: number
-): Promise<Array<{
-  id: string;
-  original_name: string | null;
-  gender: string | null;
-  birthday: string | null;
-  generated_names: string;
-  created_at: number;
-}>> {
-  const since = Date.now() - limitDays * 24 * 60 * 60 * 1000;
-  const rows = await db
-    .prepare(
-      'SELECT * FROM name_history WHERE user_id = ? AND created_at > ? ORDER BY created_at DESC LIMIT 50'
-    )
-    .bind(userId, since)
-    .all();
-  return (rows.results ?? []) as any[];
+  limit = 50
+): Promise<Array<{ id: string; original_name: string; gender: string; birthday: string; generated_names: string; created_at: number }>> {
+  const result = await db
+    .prepare('SELECT id, original_name, gender, birthday, generated_names, created_at FROM name_history WHERE user_id = ? ORDER BY created_at DESC LIMIT ?')
+    .bind(userId, limit)
+    .all<{ id: string; original_name: string; gender: string; birthday: string; generated_names: string; created_at: number }>();
+  return result.results;
 }
 
 // ── Favorites ──────────────────────────────────────────────────────────────
@@ -203,14 +187,14 @@ export async function addFavorite(
   params: {
     userId: string;
     chineseName: string;
-    pinyin: string | null;
-    meaning: string | null;
-    style: string | null;
+    pinyin: string;
+    meaning: string;
+    style: string;
   }
-) {
+): Promise<void> {
   await db
     .prepare(
-      `INSERT INTO favorites (id, user_id, chinese_name, pinyin, meaning, style, created_at)
+      `INSERT OR IGNORE INTO favorites (id, user_id, chinese_name, pinyin, meaning, style, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
@@ -229,7 +213,7 @@ export async function removeFavorite(
   db: D1Database,
   userId: string,
   chineseName: string
-) {
+): Promise<void> {
   await db
     .prepare('DELETE FROM favorites WHERE user_id = ? AND chinese_name = ?')
     .bind(userId, chineseName)
@@ -239,22 +223,18 @@ export async function removeFavorite(
 export async function getFavorites(
   db: D1Database,
   userId: string
-): Promise<Array<{
-  id: string;
-  chinese_name: string;
-  pinyin: string | null;
-  meaning: string | null;
-  style: string | null;
-  created_at: number;
-}>> {
-  const rows = await db
-    .prepare('SELECT * FROM favorites WHERE user_id = ? ORDER BY created_at DESC')
+): Promise<Array<{ id: string; chinese_name: string; pinyin: string; meaning: string; style: string; created_at: number }>> {
+  const result = await db
+    .prepare('SELECT id, chinese_name, pinyin, meaning, style, created_at FROM favorites WHERE user_id = ? ORDER BY created_at DESC')
     .bind(userId)
-    .all();
-  return (rows.results ?? []) as any[];
+    .all<{ id: string; chinese_name: string; pinyin: string; meaning: string; style: string; created_at: number }>();
+  return result.results;
 }
 
-export async function getFavoriteCount(db: D1Database, userId: string): Promise<number> {
+export async function getFavoriteCount(
+  db: D1Database,
+  userId: string
+): Promise<number> {
   const row = await db
     .prepare('SELECT COUNT(*) as cnt FROM favorites WHERE user_id = ?')
     .bind(userId)

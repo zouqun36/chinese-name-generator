@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useSession, signIn } from "next-auth/react";
+
 import Link from "next/link";
 import { Style, Gender } from "@/lib/nameData";
 import { GeneratedName, generateNames } from "@/lib/nameGenerator";
@@ -87,7 +87,7 @@ function UpgradeModal({ tier, onClose }: UpgradeModalProps) {
         <div className="space-y-3 mb-6">
           {tier === 'anonymous' && (
             <button
-              onClick={() => signIn('google')}
+              onClick={() => { window.location.href = '/api/auth/signin/google?callbackUrl=' + encodeURIComponent(window.location.pathname); }}
               className="w-full py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 border border-zinc-600 text-sm font-medium transition"
             >
               Sign in free → Get 10/day

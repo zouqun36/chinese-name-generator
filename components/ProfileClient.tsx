@@ -5,11 +5,11 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 
 interface ProfileClientProps {
-  user: {
+  user?: {
     name?: string | null;
     email?: string | null;
     image?: string | null;
-  };
+  } | null;
 }
 
 interface UsageData {
@@ -36,7 +36,15 @@ interface FavoriteItem {
   created_at: number;
 }
 
-export default function ProfileClient({ user }: ProfileClientProps) {
+export default function ProfileClient({ user: initialUser }: ProfileClientProps) {
+  const [user, setUser] = useState(initialUser ?? null);
+
+  useEffect(() => {
+    fetch('/api/auth/session')
+      .then(r => r.json() as any)
+      .then((d: any) => { if (d?.user) setUser(d.user); })
+      .catch(() => {});
+  }, []);
   const [usage, setUsage] = useState<UsageData | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
@@ -95,16 +103,16 @@ export default function ProfileClient({ user }: ProfileClientProps) {
         {/* User Card */}
         <div className="bg-white rounded-2xl shadow-sm p-6 mb-6">
           <div className="flex items-center gap-4">
-            {user.image ? (
+            {user?.image ? (
               <img src={user.image} alt="avatar" className="w-16 h-16 rounded-full" />
             ) : (
               <div className="w-16 h-16 rounded-full bg-gradient-to-br from-red-400 to-amber-400 flex items-center justify-center text-white text-2xl font-bold">
-                {user.name?.[0] ?? '?'}
+                {user?.name?.[0] ?? '?'}
               </div>
             )}
             <div>
-              <h2 className="text-xl font-bold text-gray-900">{user.name ?? 'User'}</h2>
-              <p className="text-gray-500 text-sm">{user.email}</p>
+              <h2 className="text-xl font-bold text-gray-900">{user?.name ?? 'User'}</h2>
+              <p className="text-gray-500 text-sm">{user?.email}</p>
               <span className={`inline-block mt-1 px-2 py-0.5 rounded-full text-xs font-medium ${badge.color}`}>
                 {badge.label}
               </span>

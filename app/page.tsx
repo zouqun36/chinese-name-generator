@@ -1,28 +1,11 @@
 export const runtime = 'edge';
-import { getToken } from 'next-auth/jwt';
-import { headers, cookies } from 'next/headers';
 import InputForm from '@/components/InputForm';
 import NavBar from '@/components/NavBar';
 
-export default async function Home() {
-  // In edge runtime, read session from JWT token
-  let user = null;
-  try {
-    const cookieStore = await cookies();
-    const sessionToken =
-      cookieStore.get('__Secure-next-auth.session-token')?.value ??
-      cookieStore.get('next-auth.session-token')?.value;
-
-    if (sessionToken) {
-      // Just pass minimal user info for navbar
-      // Full session handled client-side via useSession
-      user = { name: null, email: null, image: null };
-    }
-  } catch {}
-
+export default function Home() {
   return (
     <main className="max-w-2xl mx-auto px-5 py-10">
-      <NavBar user={user} />
+      <NavBar />
       <header className="text-center mb-10 mt-6">
         <h1 className="text-3xl font-bold tracking-tight mb-1">
           Chinese Name Generator

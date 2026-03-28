@@ -1,1 +1,1 @@
-var s={},i=(l,u,_)=>(s.__chunk_2222=(c,n,t)=>{"use strict";t.d(n,{w:()=>a});var r=t(5622);async function a(o){let e=await(0,r.getSession)(o);return e?{user:e}:null}},s);export{i as __getNamedExports};
+var n={},b=(o,u,_)=>(n.__chunk_2222=(c,r,t)=>{"use strict";t.d(r,{w:()=>a});var s=t(5622);async function a(l){let e=await(0,s.Ht)(l);return e?{user:e}:null}},n);export{b as __getNamedExports};

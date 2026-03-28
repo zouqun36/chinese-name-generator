@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getEdgeSession as auth } from '@/lib/session';
-import { getDB, getUserByEmail, getNameHistory } from '@/lib/db';
-import { HISTORY_LIMITS } from '@/lib/types';
+import { getDB, getUserByEmail, getHistory } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'edge';
+
+const HISTORY_LIMITS: Record<string, number> = {
+  free: 30,
+  pro: 200,
+};
 
 export async function GET(req: NextRequest) {
   const session = await auth(req);
@@ -25,13 +29,17 @@ export async function GET(req: NextRequest) {
     (user.subscription_expires_at as unknown as number) > Date.now()
     ? 'pro' : 'free';
 
-  const limitDays = HISTORY_LIMITS[tier as keyof typeof HISTORY_LIMITS];
-  const history = await getNameHistory(db, user.id, limitDays);
+  const limit = HISTORY_LIMITS[tier] ?? 30;
+  const history = await getHistory(db, user.id, limit);
 
   return NextResponse.json({
     history: history.map((h) => ({
-      ...h,
-      generatedNames: JSON.parse(h.generated_names),
+      id: h.id,
+      originalName: h.original_name,
+      gender: h.gender,
+      birthday: h.birthday,
+      generatedNames: (() => { try { return JSON.parse(h.generated_names); } catch { return []; } })(),
+      createdAt: h.created_at,
     })),
   });
 }

@@ -1,7 +1,6 @@
 'use client';
 
-import { useState } from 'react';
-import { useSession } from 'next-auth/react';
+import { useState, useEffect } from 'react';
 import { GeneratedName } from '@/lib/nameGenerator';
 
 interface Props {
@@ -18,12 +17,17 @@ const STYLE_ICONS: Record<string, string> = {
 };
 
 export default function NameCard({ name, index }: Props) {
-  const { data: session } = useSession();
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
+
+  // Check session on mount
+  useEffect(() => {
+    fetch('/api/auth/session').then(r => r.json() as any).then((d: any) => setIsLoggedIn(!!d?.user)).catch(() => setIsLoggedIn(false));
+  }, []);
   const [favorited, setFavorited] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const toggleFavorite = async () => {
-    if (!session?.user) return;
+    if (!isLoggedIn) return;
     setLoading(true);
     try {
       const method = favorited ? 'DELETE' : 'POST';
@@ -100,7 +104,7 @@ export default function NameCard({ name, index }: Props) {
         </div>
 
         {/* Favorite button — only show when logged in */}
-        {session?.user && (
+        {isLoggedIn && (
           <button
             onClick={toggleFavorite}
             disabled={loading}

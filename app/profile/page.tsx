@@ -5,14 +5,10 @@ import ProfileClient from '@/components/ProfileClient';
 
 export default async function ProfilePage() {
   const cookieStore = await cookies();
-  const sessionToken =
-    cookieStore.get('__Secure-next-auth.session-token')?.value ??
-    cookieStore.get('next-auth.session-token')?.value;
-
+  // Our custom session cookie (set by lib/auth-edge.ts)
+  const sessionToken = cookieStore.get('auth_session')?.value;
   if (!sessionToken) {
     redirect('/login');
   }
-
-  // Pass empty user — client will fill via useSession
-  return <ProfileClient user={{ name: null, email: null, image: null }} />;
+  return <ProfileClient />;
 }

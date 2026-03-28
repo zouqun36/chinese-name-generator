@@ -1,17 +1,37 @@
 'use client';
 
-import { Suspense, useState } from 'react';
-import { useSession, signIn } from 'next-auth/react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { Suspense, useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
+interface SessionUser {
+  name?: string | null;
+  email?: string | null;
+  image?: string | null;
+}
+
+function useAuthSession() {
+  const [user, setUser] = useState<SessionUser | null>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    fetch('/api/auth/session')
+      .then(r => r.json() as any)
+      .then(d => { if (d?.user) setUser(d.user); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+  return { user, loading };
+}
+
 // ── PayPal Button ────────────────────────────────────────────────────────────
-function PayPalButton({ plan, disabled }: { plan: 'monthly' | 'yearly'; disabled: boolean }) {
+function PayPalButton({ plan, disabled, isLoggedIn }: { plan: 'monthly' | 'yearly'; disabled: boolean; isLoggedIn: boolean }) {
   const [loading, setLoading] = useState(false);
-  const { data: session } = useSession();
 
   const handlePayPal = async () => {
-    if (!session?.user) { signIn('google'); return; }
+    if (!isLoggedIn) {
+      window.location.href = `/api/auth/signin/google?callbackUrl=${encodeURIComponent('/pricing')}`;
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch('/api/paypal/create-order', {
@@ -45,26 +65,24 @@ function PayPalButton({ plan, disabled }: { plan: 'monthly' | 'yearly'; disabled
           <path d="M7.076 21.337H2.47a.641.641 0 0 1-.633-.74L4.944.901C5.026.382 5.474 0 5.998 0h7.46c2.57 0 4.578.543 5.69 1.81 1.01 1.15 1.304 2.42 1.012 4.287-.023.143-.047.288-.077.437-.983 5.05-4.349 6.797-8.647 6.797h-2.19c-.524 0-.968.382-1.05.9l-1.12 7.106zm14.146-14.42a3.35 3.35 0 0 0-.607-.541c-.013.076-.026.175-.041.254-.93 4.778-4.005 7.201-9.138 7.201h-2.19a.563.563 0 0 0-.556.479l-1.187 7.527h-.506l-.24 1.516a.56.56 0 0 0 .554.647h3.882c.46 0 .85-.334.922-.788.06-.26.76-4.852.816-5.09a.932.932 0 0 1 .923-.788h.58c3.76 0 6.705-1.528 7.565-5.946.36-1.847.174-3.388-.777-4.471z"/>
         </svg>
       )}
-      {loading ? 'Redirecting...' : 'Pay with PayPal'}
+      {loading ? 'Redirecting...' : `Pay with PayPal — ${plan === 'monthly' ? '$2.99/mo' : '$19.99/yr'}`}
     </button>
   );
 }
 
 // ── Pricing Inner ────────────────────────────────────────────────────────────
 function PricingInner() {
-  const { data: session } = useSession();
+  const { user, loading } = useAuthSession();
   const searchParams = useSearchParams();
-  const router = useRouter();
   const canceled = searchParams.get('canceled') === '1';
   const paypalSuccess = searchParams.get('paypal') === 'success';
   const [stripeLoading, setStripeLoading] = useState<'monthly' | 'yearly' | null>(null);
 
-  // Handle PayPal return with orderId
-  const orderId = searchParams.get('token'); // PayPal returns ?token=ORDER_ID
-  const plan = searchParams.get('plan');
-
   const handleStripeCheckout = async (plan: 'monthly' | 'yearly') => {
-    if (!session?.user) { signIn('google'); return; }
+    if (!user) {
+      window.location.href = `/api/auth/signin/google?callbackUrl=${encodeURIComponent('/pricing')}`;
+      return;
+    }
     setStripeLoading(plan);
     try {
       const res = await fetch('/api/checkout', {
@@ -134,12 +152,15 @@ function PricingInner() {
             <li className="flex items-start gap-2"><span className="text-green-500">✓</span><span>Save up to 5 favorites</span></li>
             <li className="flex items-start gap-2"><span className="text-zinc-600">✗</span><span className="text-zinc-600">No audio / export</span></li>
           </ul>
-          {session?.user ? (
+          {user ? (
             <Link href="/" className="block w-full py-3 rounded-xl bg-zinc-800 text-center text-sm">You&apos;re signed in ✓</Link>
           ) : (
-            <button onClick={() => signIn('google')} className="w-full py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 transition text-sm">
+            <a
+              href={`/api/auth/signin/google?callbackUrl=${encodeURIComponent('/pricing')}`}
+              className="block w-full py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 transition text-center text-sm"
+            >
               Sign Up Free
-            </button>
+            </a>
           )}
         </div>
 
@@ -163,7 +184,6 @@ function PricingInner() {
             <li className="flex items-start gap-2"><span className="text-amber-500">✓</span><span>Export as image</span></li>
           </ul>
 
-          {/* Plan toggle */}
           <div className="space-y-2 mb-3">
             {/* Stripe */}
             <div className="space-y-1.5">
@@ -194,8 +214,8 @@ function PricingInner() {
             {/* PayPal */}
             <div className="space-y-1.5">
               <p className="text-xs text-zinc-500 font-medium">Pay with PayPal</p>
-              <PayPalButton plan="monthly" disabled={stripeLoading !== null} />
-              <PayPalButton plan="yearly" disabled={stripeLoading !== null} />
+              <PayPalButton plan="monthly" disabled={stripeLoading !== null} isLoggedIn={!!user} />
+              <PayPalButton plan="yearly" disabled={stripeLoading !== null} isLoggedIn={!!user} />
             </div>
           </div>
 
@@ -203,7 +223,7 @@ function PricingInner() {
         </div>
       </div>
 
-      {/* Feature comparison table */}
+      {/* Feature comparison */}
       <div className="max-w-2xl mx-auto mb-16">
         <h2 className="text-xl font-bold text-center mb-6">Feature Comparison</h2>
         <div className="bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden">

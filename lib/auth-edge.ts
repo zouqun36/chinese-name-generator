@@ -77,7 +77,7 @@ export async function createSessionCookie(user: SessionUser, secret: string): Pr
 }
 
 export async function getSession(req: Request): Promise<SessionUser | null> {
-  const secret = (globalThis as any).NEXTAUTH_SECRET ?? process.env.NEXTAUTH_SECRET ?? process.env.AUTH_SECRET;
+  const secret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET ?? (globalThis as any).AUTH_SECRET ?? (globalThis as any).NEXTAUTH_SECRET;
   if (!secret) return null;
   const cookie = req.headers.get('cookie') ?? '';
   const match = cookie.match(new RegExp(`(?:^|;\\s*)${COOKIE_NAME}=([^;]+)`));
