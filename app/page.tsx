@@ -1,3 +1,4 @@
+export const runtime = 'edge';
 import { auth } from '@/auth';
 import InputForm from '@/components/InputForm';
 import NavBar from '@/components/NavBar';

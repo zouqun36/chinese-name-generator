@@ -4,6 +4,7 @@ import { getDB, getUserByEmail, getNameHistory } from '@/lib/db';
 import { HISTORY_LIMITS } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
+export const runtime = 'edge';
 
 export async function GET(req: NextRequest) {
   const session = await auth();

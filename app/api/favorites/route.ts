@@ -4,6 +4,7 @@ import { getDB, getUserByEmail, addFavorite, removeFavorite, getFavorites, getFa
 import { FAVORITE_LIMITS } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
+export const runtime = 'edge';
 
 // GET /api/favorites — list favorites
 export async function GET(req: NextRequest) {

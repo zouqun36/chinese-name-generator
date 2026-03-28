@@ -4,6 +4,7 @@ import { getDB, updateUserSubscription } from '@/lib/db';
 import Stripe from 'stripe';
 
 export const dynamic = 'force-dynamic';
+export const runtime = 'edge';
 
 export async function POST(req: NextRequest) {
   const body = await req.text();

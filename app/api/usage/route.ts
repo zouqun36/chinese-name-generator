@@ -4,6 +4,7 @@ import { USAGE_LIMITS } from '@/lib/types';
 import { getDB, getUsageCount, incrementUsage, getUserByEmail } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
+export const runtime = 'edge';
 
 // Fallback in-memory store (dev / when D1 not available)
 const memUsage = new Map<string, number>();
